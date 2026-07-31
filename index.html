@@ -369,9 +369,17 @@
   updateDisplay();
 })();
 
+// Service worker caching was masking updates on iOS Safari (its update-check
+// doesn't reliably re-run on every visit). Actively unregister and clear any
+// previously installed one so this page always runs the current code.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((reg) => reg.unregister());
+    }).catch(() => {});
+    if (window.caches) {
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
+    }
   });
 }
 </script>
