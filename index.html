@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Speaking Timer</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0071e3">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Timer">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #0071e3;
+    --accent-active: #ff3b30;
+    --ring-track: #e5e5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --card: #1c1c1e;
+      --text: #f5f5f7;
+      --muted: #98989d;
+      --accent: #0a84ff;
+      --accent-active: #ff453a;
+      --ring-track: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+             max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  }
+  .card {
+    background: var(--card);
+    border-radius: 24px;
+    padding: 32px 28px 28px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+    text-align: center;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 24px;
+  }
+  .ring-wrap {
+    position: relative;
+    width: 240px;
+    height: 240px;
+    margin: 0 auto 24px;
+  }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-track { stroke: var(--ring-track); }
+  .ring-progress {
+    stroke: var(--accent);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.2s linear, stroke 0.3s;
+  }
+  .ring-progress.active { stroke: var(--accent-active); }
+  .time-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+  }
+  .inputs {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .input-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .input-group label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .input-group input {
+    width: 64px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--ring-track);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 20px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .input-group input:disabled { opacity: 0.5; }
+  .controls { display: flex; gap: 12px; }
+  button {
+    flex: 1;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.08s, opacity 0.2s;
+  }
+  button:active { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: default; transform: none; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-danger { background: var(--accent-active); color: white; }
+  .btn-secondary { background: var(--ring-track); color: var(--text); }
+  .status {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 16px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Speaking Timer</h1>
+
+    <div class="ring-wrap">
+      <svg width="240" height="240" viewBox="0 0 240 240">
+        <circle class="ring-track" cx="120" cy="120" r="106" fill="none" stroke-width="14"/>
+        <circle id="ringProgress" class="ring-progress" cx="120" cy="120" r="106" fill="none" stroke-width="14"
+                stroke-dasharray="666.13" stroke-dashoffset="0"/>
+      </svg>
+      <div class="time-display" id="display">01:00</div>
+    </div>
+
+    <div class="inputs">
+      <div class="input-group">
+        <label for="minutes">Min</label>
+        <input type="number" id="minutes" min="0" max="180" value="1">
+      </div>
+      <div class="input-group">
+        <label for="seconds">Sec</label>
+        <input type="number" id="seconds" min="0" max="59" value="0">
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="startPauseBtn" class="btn-primary">Start</button>
+      <button id="resetBtn" class="btn-secondary">Reset</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+<script>
+(function () {
+  const minutesInput = document.getElementById('minutes');
+  const secondsInput = document.getElementById('seconds');
+  const display = document.getElementById('display');
+  const ring = document.getElementById('ringProgress');
+  const startPauseBtn = document.getElementById('startPauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusEl = document.getElementById('status');
+
+  const RING_CIRCUMFERENCE = 2 * Math.PI * 106;
+
+  let totalSeconds = 60;
+  let remaining = totalSeconds;
+  let running = false;
+  let intervalId = null;
+
+  function getInputDuration() {
+    const m = Math.max(0, Math.min(180, parseInt(minutesInput.value, 10) || 0));
+    const s = Math.max(0, Math.min(59, parseInt(secondsInput.value, 10) || 0));
+    return m * 60 + s;
+  }
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function updateDisplay() {
+    display.textContent = formatTime(remaining);
+    const fraction = totalSeconds > 0 ? remaining / totalSeconds : 0;
+    ring.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - fraction));
+    ring.classList.toggle('active', remaining <= 10 && remaining > 0);
+  }
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function announceForRemaining(sec) {
+    if (sec <= 0) {
+      speak("Time's up");
+      return;
+    }
+    if (sec <= 10) {
+      speak(String(sec));
+      return;
+    }
+    if (sec % 10 === 0) {
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      let text;
+      if (m > 0 && s > 0) {
+        text = `${m} minute${m !== 1 ? 's' : ''} ${s} second${s !== 1 ? 's' : ''} remaining`;
+      } else if (m > 0) {
+        text = `${m} minute${m !== 1 ? 's' : ''} remaining`;
+      } else {
+        text = `${s} seconds remaining`;
+      }
+      speak(text);
+    }
+  }
+
+  function tick() {
+    remaining -= 1;
+    updateDisplay();
+    announceForRemaining(remaining);
+    if (remaining <= 0) {
+      stopTimer();
+      statusEl.textContent = "Done";
+      startPauseBtn.textContent = 'Start';
+      startPauseBtn.classList.remove('btn-danger');
+      startPauseBtn.classList.add('btn-primary');
+    }
+  }
+
+  function startTimer() {
+    if (remaining <= 0) return;
+    running = true;
+    startPauseBtn.textContent = 'Pause';
+    startPauseBtn.classList.remove('btn-primary');
+    startPauseBtn.classList.add('btn-danger');
+    minutesInput.disabled = true;
+    secondsInput.disabled = true;
+    statusEl.textContent = 'Running…';
+    intervalId = setInterval(tick, 1000);
+  }
+
+  function stopTimer() {
+    running = false;
+    clearInterval(intervalId);
+    intervalId = null;
+    startPauseBtn.textContent = 'Start';
+    startPauseBtn.classList.remove('btn-danger');
+    startPauseBtn.classList.add('btn-primary');
+  }
+
+  function pauseTimer() {
+    stopTimer();
+    statusEl.textContent = 'Paused';
+    window.speechSynthesis.cancel();
+  }
+
+  function resetTimer() {
+    stopTimer();
+    minutesInput.disabled = false;
+    secondsInput.disabled = false;
+    totalSeconds = getInputDuration() || 1;
+    remaining = totalSeconds;
+    statusEl.textContent = '';
+    window.speechSynthesis.cancel();
+    updateDisplay();
+  }
+
+  startPauseBtn.addEventListener('click', () => {
+    if (running) {
+      pauseTimer();
+    } else {
+      if (remaining === totalSeconds || remaining === 0) {
+        totalSeconds = getInputDuration() || 1;
+        remaining = totalSeconds;
+      }
+      if (remaining > 0) startTimer();
+    }
+  });
+
+  resetBtn.addEventListener('click', resetTimer);
+
+  [minutesInput, secondsInput].forEach(input => {
+    input.addEventListener('change', () => {
+      if (!running) {
+        totalSeconds = getInputDuration() || 1;
+        remaining = totalSeconds;
+        updateDisplay();
+      }
+    });
+  });
+
+  ring.setAttribute('stroke-dasharray', String(RING_CIRCUMFERENCE));
+  totalSeconds = getInputDuration() || 60;
+  remaining = totalSeconds;
+  updateDisplay();
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
