@@ -22,6 +22,7 @@
     --muted: #6e6e73;
     --accent: #0071e3;
     --accent-active: #ff3b30;
+    --rest: #34c759;
     --ring-track: #e5e5ea;
   }
   @media (prefers-color-scheme: dark) {
@@ -32,6 +33,7 @@
       --muted: #98989d;
       --accent: #0a84ff;
       --accent-active: #ff453a;
+      --rest: #30d158;
       --ring-track: #2c2c2e;
     }
   }
@@ -60,7 +62,30 @@
   h1 {
     font-size: 20px;
     font-weight: 600;
-    margin: 0 0 24px;
+    margin: 0 0 20px;
+  }
+  .mode-switch {
+    display: flex;
+    background: var(--ring-track);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+  .mode-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 8px;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .mode-btn.active {
+    background: var(--card);
+    color: var(--text);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   }
   .ring-wrap {
     position: relative;
@@ -75,18 +100,33 @@
     stroke-linecap: round;
     transition: stroke-dashoffset 0.2s linear, stroke 0.3s;
   }
+  .ring-progress.rest { stroke: var(--rest); }
   .ring-progress.active { stroke: var(--accent-active); }
   .time-display {
     position: absolute;
     inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 4px;
+  }
+  #display {
     font-size: 52px;
     font-weight: 300;
     font-variant-numeric: tabular-nums;
     letter-spacing: -1px;
   }
+  .phase-label {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    min-height: 18px;
+  }
+  .phase-label.work { color: var(--accent); }
+  .phase-label.rest { color: var(--rest); }
   .inputs {
     display: flex;
     gap: 12px;
@@ -181,16 +221,24 @@
   <div class="card">
     <h1>Speaking Timer</h1>
 
+    <div class="mode-switch">
+      <button type="button" class="mode-btn active" id="modeTimerBtn">Timer</button>
+      <button type="button" class="mode-btn" id="modeTabataBtn">Tabata</button>
+    </div>
+
     <div class="ring-wrap">
       <svg width="240" height="240" viewBox="0 0 240 240">
         <circle class="ring-track" cx="120" cy="120" r="106" fill="none" stroke-width="14"/>
         <circle id="ringProgress" class="ring-progress" cx="120" cy="120" r="106" fill="none" stroke-width="14"
                 stroke-dasharray="666.13" stroke-dashoffset="0"/>
       </svg>
-      <div class="time-display" id="display">01:00</div>
+      <div class="time-display">
+        <div class="phase-label" id="phaseLabel"></div>
+        <div id="display">01:00</div>
+      </div>
     </div>
 
-    <div class="inputs">
+    <div class="inputs" id="timerInputs">
       <div class="input-group">
         <label for="minutes">Min</label>
         <input type="number" id="minutes" min="0" max="180" value="1">
@@ -198,6 +246,13 @@
       <div class="input-group">
         <label for="seconds">Sec</label>
         <input type="number" id="seconds" min="0" max="59" value="0">
+      </div>
+    </div>
+
+    <div class="inputs" id="tabataInputs" style="display:none;">
+      <div class="input-group">
+        <label for="rounds">Rounds</label>
+        <input type="number" id="rounds" min="1" max="20" value="5">
       </div>
     </div>
 
@@ -220,12 +275,22 @@
 (function () {
   const minutesInput = document.getElementById('minutes');
   const secondsInput = document.getElementById('seconds');
+  const roundsInput = document.getElementById('rounds');
+  const timerInputs = document.getElementById('timerInputs');
+  const tabataInputs = document.getElementById('tabataInputs');
+  const modeTimerBtn = document.getElementById('modeTimerBtn');
+  const modeTabataBtn = document.getElementById('modeTabataBtn');
   const display = document.getElementById('display');
+  const phaseLabelEl = document.getElementById('phaseLabel');
   const ring = document.getElementById('ringProgress');
   const startPauseBtn = document.getElementById('startPauseBtn');
   const resetBtn = document.getElementById('resetBtn');
   const statusEl = document.getElementById('status');
   const phrasesToggle = document.getElementById('phrasesToggle');
+
+  const WORK_SECONDS = 45;
+  const REST_SECONDS = 15;
+  const RING_CIRCUMFERENCE = 2 * Math.PI * 106;
 
   let phrasesEnabled = localStorage.getItem('phrasesEnabled') !== 'false';
   phrasesToggle.checked = phrasesEnabled;
@@ -234,18 +299,25 @@
     localStorage.setItem('phrasesEnabled', String(phrasesEnabled));
   });
 
-  const RING_CIRCUMFERENCE = 2 * Math.PI * 106;
-
+  let mode = 'timer'; // 'timer' | 'tabata'
   let totalSeconds = 60;
   let remaining = totalSeconds;
   let running = false;
   let intervalId = null;
   let keepAliveId = null;
 
+  let tabataRounds = 5;
+  let tabataRound = 1;
+  let tabataPhase = 'work'; // 'work' | 'rest'
+
   function getInputDuration() {
     const m = Math.max(0, Math.min(180, parseInt(minutesInput.value, 10) || 0));
     const s = Math.max(0, Math.min(59, parseInt(secondsInput.value, 10) || 0));
     return m * 60 + s;
+  }
+
+  function getRoundsInput() {
+    return Math.max(1, Math.min(20, parseInt(roundsInput.value, 10) || 5));
   }
 
   function formatTime(sec) {
@@ -259,6 +331,16 @@
     const fraction = totalSeconds > 0 ? remaining / totalSeconds : 0;
     ring.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - fraction));
     ring.classList.toggle('active', remaining <= 10 && remaining > 0);
+    ring.classList.toggle('rest', mode === 'tabata' && tabataPhase === 'rest');
+
+    if (mode === 'tabata') {
+      phaseLabelEl.textContent = tabataPhase === 'work' ? 'Work' : 'Rest';
+      phaseLabelEl.classList.toggle('work', tabataPhase === 'work');
+      phaseLabelEl.classList.toggle('rest', tabataPhase === 'rest');
+    } else {
+      phaseLabelEl.textContent = '';
+      phaseLabelEl.classList.remove('work', 'rest');
+    }
   }
 
   function speak(text) {
@@ -320,6 +402,22 @@
     }
   }
 
+  function tabataAnnounceTick(sec) {
+    if (sec > 0 && sec <= 10) {
+      speak(String(sec));
+    }
+  }
+
+  function announcePhaseStart() {
+    const label = tabataPhase === 'work' ? 'Work' : 'Rest';
+    const text = `Round ${tabataRound} of ${tabataRounds}. ${label}!`;
+    if (tabataPhase === 'work' && phrasesEnabled) {
+      speak(`${text} ${randomHype()}`);
+    } else {
+      speak(text);
+    }
+  }
+
   // iOS Safari only allows speechSynthesis to start from directly within a user
   // gesture; announcements fired later from setInterval are silently dropped
   // unless we speak once, synchronously, inside the tap handler first.
@@ -327,6 +425,10 @@
     if (sec <= 0) return;
     if (sec <= 10) {
       speak(String(sec));
+      return;
+    }
+    if (mode === 'tabata') {
+      announcePhaseStart();
       return;
     }
     speak(phrasesEnabled ? `${remainingPhrase(sec)}. ${randomHype()}` : remainingPhrase(sec));
@@ -351,17 +453,60 @@
     }
   }
 
+  function finishRun() {
+    stopTimer();
+    statusEl.textContent = 'Done';
+    startPauseBtn.textContent = 'Start';
+    startPauseBtn.classList.remove('btn-danger');
+    startPauseBtn.classList.add('btn-primary');
+  }
+
+  function advanceTabataPhase() {
+    if (tabataPhase === 'work') {
+      if (tabataRound >= tabataRounds) {
+        speak(phrasesEnabled ? `Workout complete! ${randomHype()}` : 'Workout complete!');
+        finishRun();
+        return;
+      }
+      tabataPhase = 'rest';
+      totalSeconds = REST_SECONDS;
+      remaining = REST_SECONDS;
+    } else {
+      tabataRound += 1;
+      tabataPhase = 'work';
+      totalSeconds = WORK_SECONDS;
+      remaining = WORK_SECONDS;
+    }
+    updateDisplay();
+    announcePhaseStart();
+  }
+
   function tick() {
     remaining -= 1;
+
+    if (mode === 'tabata') {
+      if (remaining > 0) {
+        updateDisplay();
+        tabataAnnounceTick(remaining);
+      } else {
+        advanceTabataPhase();
+      }
+      return;
+    }
+
     updateDisplay();
     announceForRemaining(remaining);
     if (remaining <= 0) {
-      stopTimer();
-      statusEl.textContent = "Done";
-      startPauseBtn.textContent = 'Start';
-      startPauseBtn.classList.remove('btn-danger');
-      startPauseBtn.classList.add('btn-primary');
+      finishRun();
     }
+  }
+
+  function setControlsDisabled(disabled) {
+    minutesInput.disabled = disabled;
+    secondsInput.disabled = disabled;
+    roundsInput.disabled = disabled;
+    modeTimerBtn.disabled = disabled;
+    modeTabataBtn.disabled = disabled;
   }
 
   function startTimer() {
@@ -370,9 +515,10 @@
     startPauseBtn.textContent = 'Pause';
     startPauseBtn.classList.remove('btn-primary');
     startPauseBtn.classList.add('btn-danger');
-    minutesInput.disabled = true;
-    secondsInput.disabled = true;
-    statusEl.textContent = 'Running…';
+    setControlsDisabled(true);
+    statusEl.textContent = mode === 'tabata'
+      ? `Round ${tabataRound} of ${tabataRounds} — Running…`
+      : 'Running…';
     unlockAndAnnounceStart(remaining);
     startKeepAlive();
     intervalId = setInterval(tick, 1000);
@@ -390,19 +536,38 @@
 
   function pauseTimer() {
     stopTimer();
+    setControlsDisabled(false);
     statusEl.textContent = 'Paused';
     window.speechSynthesis.cancel();
   }
 
   function resetTimer() {
     stopTimer();
-    minutesInput.disabled = false;
-    secondsInput.disabled = false;
-    totalSeconds = getInputDuration() || 1;
-    remaining = totalSeconds;
+    setControlsDisabled(false);
     statusEl.textContent = '';
     window.speechSynthesis.cancel();
+
+    if (mode === 'tabata') {
+      tabataRounds = getRoundsInput();
+      tabataRound = 1;
+      tabataPhase = 'work';
+      totalSeconds = WORK_SECONDS;
+      remaining = WORK_SECONDS;
+    } else {
+      totalSeconds = getInputDuration() || 1;
+      remaining = totalSeconds;
+    }
     updateDisplay();
+  }
+
+  function setMode(newMode) {
+    if (running || mode === newMode) return;
+    mode = newMode;
+    modeTimerBtn.classList.toggle('active', mode === 'timer');
+    modeTabataBtn.classList.toggle('active', mode === 'tabata');
+    timerInputs.style.display = mode === 'timer' ? '' : 'none';
+    tabataInputs.style.display = mode === 'tabata' ? '' : 'none';
+    resetTimer();
   }
 
   startPauseBtn.addEventListener('click', () => {
@@ -410,23 +575,39 @@
       pauseTimer();
     } else {
       if (remaining === totalSeconds || remaining === 0) {
-        totalSeconds = getInputDuration() || 1;
-        remaining = totalSeconds;
+        if (mode === 'tabata') {
+          tabataRounds = getRoundsInput();
+          tabataRound = 1;
+          tabataPhase = 'work';
+          totalSeconds = WORK_SECONDS;
+          remaining = WORK_SECONDS;
+        } else {
+          totalSeconds = getInputDuration() || 1;
+          remaining = totalSeconds;
+        }
       }
       if (remaining > 0) startTimer();
     }
   });
 
   resetBtn.addEventListener('click', resetTimer);
+  modeTimerBtn.addEventListener('click', () => setMode('timer'));
+  modeTabataBtn.addEventListener('click', () => setMode('tabata'));
 
   [minutesInput, secondsInput].forEach(input => {
     input.addEventListener('change', () => {
-      if (!running) {
+      if (!running && mode === 'timer') {
         totalSeconds = getInputDuration() || 1;
         remaining = totalSeconds;
         updateDisplay();
       }
     });
+  });
+
+  roundsInput.addEventListener('change', () => {
+    if (!running && mode === 'tabata') {
+      tabataRounds = getRoundsInput();
+    }
   });
 
   ring.setAttribute('stroke-dasharray', String(RING_CIRCUMFERENCE));
