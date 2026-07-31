@@ -178,6 +178,7 @@
   let remaining = totalSeconds;
   let running = false;
   let intervalId = null;
+  let keepAliveId = null;
 
   function getInputDuration() {
     const m = Math.max(0, Math.min(180, parseInt(minutesInput.value, 10) || 0));
@@ -206,6 +207,17 @@
     window.speechSynthesis.speak(utterance);
   }
 
+  function remainingPhrase(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (m > 0 && s > 0) {
+      return `${m} minute${m !== 1 ? 's' : ''} ${s} second${s !== 1 ? 's' : ''} remaining`;
+    } else if (m > 0) {
+      return `${m} minute${m !== 1 ? 's' : ''} remaining`;
+    }
+    return `${s} seconds remaining`;
+  }
+
   function announceForRemaining(sec) {
     if (sec <= 0) {
       speak("Time's up");
@@ -216,17 +228,34 @@
       return;
     }
     if (sec % 10 === 0) {
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      let text;
-      if (m > 0 && s > 0) {
-        text = `${m} minute${m !== 1 ? 's' : ''} ${s} second${s !== 1 ? 's' : ''} remaining`;
-      } else if (m > 0) {
-        text = `${m} minute${m !== 1 ? 's' : ''} remaining`;
-      } else {
-        text = `${s} seconds remaining`;
+      speak(remainingPhrase(sec));
+    }
+  }
+
+  // iOS Safari only allows speechSynthesis to start from directly within a user
+  // gesture; announcements fired later from setInterval are silently dropped
+  // unless we speak once, synchronously, inside the tap handler first.
+  function unlockAndAnnounceStart(sec) {
+    if (sec <= 0) return;
+    speak(sec <= 10 ? String(sec) : remainingPhrase(sec));
+  }
+
+  // Also works around a WebKit bug where speechSynthesis silently stalls after
+  // being idle for ~15s; nudging pause/resume periodically keeps it alive.
+  function startKeepAlive() {
+    stopKeepAlive();
+    keepAliveId = setInterval(() => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
       }
-      speak(text);
+    }, 4000);
+  }
+
+  function stopKeepAlive() {
+    if (keepAliveId) {
+      clearInterval(keepAliveId);
+      keepAliveId = null;
     }
   }
 
@@ -252,11 +281,14 @@
     minutesInput.disabled = true;
     secondsInput.disabled = true;
     statusEl.textContent = 'Running…';
+    unlockAndAnnounceStart(remaining);
+    startKeepAlive();
     intervalId = setInterval(tick, 1000);
   }
 
   function stopTimer() {
     running = false;
+    stopKeepAlive();
     clearInterval(intervalId);
     intervalId = null;
     startPauseBtn.textContent = 'Start';
