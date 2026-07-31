@@ -203,8 +203,34 @@
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
+    utterance.rate = 1.05;
+    utterance.pitch = 1.1;
     window.speechSynthesis.speak(utterance);
+  }
+
+  const HYPE_LINES = [
+    "You are doing great!",
+    "Keep going!",
+    "You've got this!",
+    "Don't be a wuss!",
+    "Stay strong!",
+    "Push through, champ!",
+    "Look at you go!",
+    "Almost there, don't quit now!",
+    "That's the spirit!",
+    "Quitting is for tomorrow, not today!",
+    "Your future self says thanks!",
+    "Nothing you can't handle!"
+  ];
+  let lastHypeIndex = -1;
+
+  function randomHype() {
+    let i = Math.floor(Math.random() * HYPE_LINES.length);
+    if (HYPE_LINES.length > 1 && i === lastHypeIndex) {
+      i = (i + 1) % HYPE_LINES.length;
+    }
+    lastHypeIndex = i;
+    return HYPE_LINES[i];
   }
 
   function remainingPhrase(sec) {
@@ -228,7 +254,7 @@
       return;
     }
     if (sec % 10 === 0) {
-      speak(remainingPhrase(sec));
+      speak(`${remainingPhrase(sec)}. ${randomHype()}`);
     }
   }
 
@@ -237,7 +263,7 @@
   // unless we speak once, synchronously, inside the tap handler first.
   function unlockAndAnnounceStart(sec) {
     if (sec <= 0) return;
-    speak(sec <= 10 ? String(sec) : remainingPhrase(sec));
+    speak(sec <= 10 ? String(sec) : `${remainingPhrase(sec)}. ${randomHype()}`);
   }
 
   // Also works around a WebKit bug where speechSynthesis silently stalls after
