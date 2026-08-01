@@ -443,16 +443,40 @@
     "You didn't come this far to coast.",
     "Be the person your dog thinks you are."
   ];
-  let lastHypeIndex = -1;
+  const COMPLETION_LINES = [
+    "Job well done.",
+    "You did it.",
+    "Done.",
+    "Good work.",
+    "Nailed it.",
+    "That's a wrap.",
+    "Crushed it.",
+    "Finished strong.",
+    "That's how it's done.",
+    "Look at you, all finished.",
+    "You survived.",
+    "Told you you could.",
+    "Done and dusted.",
+    "Your couch is ready for you now.",
+    "Complaints are now accepted.",
+    "Go have a snack, you earned it."
+  ];
 
-  function randomHype() {
-    let i = Math.floor(Math.random() * HYPE_LINES.length);
-    if (HYPE_LINES.length > 1 && i === lastHypeIndex) {
-      i = (i + 1) % HYPE_LINES.length;
-    }
-    lastHypeIndex = i;
-    return HYPE_LINES[i];
+  // Picks at random, never the same line twice in a row.
+  function makePicker(lines) {
+    let last = -1;
+    return function () {
+      let i = Math.floor(Math.random() * lines.length);
+      if (lines.length > 1 && i === last) {
+        i = (i + 1) % lines.length;
+      }
+      last = i;
+      return lines[i];
+    };
   }
+
+  const randomHype = makePicker(HYPE_LINES);
+  const randomCompletion = makePicker(COMPLETION_LINES);
 
   function remainingPhrase(sec) {
     const m = Math.floor(sec / 60);
@@ -467,7 +491,7 @@
 
   function announceForRemaining(sec) {
     if (sec <= 0) {
-      speak("Time's up");
+      speak(phrasesEnabled ? `Time's up. ${randomCompletion()}` : "Time's up");
       return;
     }
     if (sec <= 10) {
@@ -543,7 +567,7 @@
   function advanceTabataPhase() {
     if (tabataPhase === 'work') {
       if (tabataRound >= tabataRounds) {
-        speak(phrasesEnabled ? `Workout complete! ${randomHype()}` : 'Workout complete!');
+        speak(phrasesEnabled ? `Workout complete! ${randomCompletion()}` : 'Workout complete!');
         finishRun();
         return;
       }
