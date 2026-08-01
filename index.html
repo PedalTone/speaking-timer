@@ -251,7 +251,7 @@
 
     <div class="inputs" id="tabataInputs" style="display:none;">
       <div class="input-group">
-        <label for="workSecs">Work</label>
+        <label for="workSecs">Exercise</label>
         <input type="number" id="workSecs" min="5" max="600" value="50">
       </div>
       <div class="input-group">
@@ -358,7 +358,7 @@
     ring.classList.toggle('rest', mode === 'tabata' && tabataPhase === 'rest');
 
     if (mode === 'tabata') {
-      phaseLabelEl.textContent = tabataPhase === 'work' ? 'Work' : 'Rest';
+      phaseLabelEl.textContent = tabataPhase === 'work' ? 'Exercise' : 'Rest';
       phaseLabelEl.classList.toggle('work', tabataPhase === 'work');
       phaseLabelEl.classList.toggle('rest', tabataPhase === 'rest');
     } else {
@@ -503,20 +503,28 @@
     }
   }
 
-  // Tabata gets a single 10-second heads-up per phase rather than the simple
-  // timer's per-second countdown.
+  // Only the exercise interval is narrated: a halfway call-out, then a
+  // per-second countdown over the last 10. Rest stays quiet so a short rest
+  // isn't wall-to-wall talking.
   function tabataAnnounceTick(sec) {
-    if (sec === 10) {
-      speak('10 seconds remaining');
+    if (tabataPhase !== 'work') return;
+    const halfway = Math.floor(totalSeconds / 2);
+    // Skipped when halfway would land inside the countdown and talk over it.
+    if (phrasesEnabled && halfway > 10 && sec === halfway) {
+      speak(`Halfway there. ${randomHype()}`);
+      return;
+    }
+    if (sec <= 10) {
+      speak(String(sec));
     }
   }
 
   function announcePhaseStart() {
     if (tabataPhase === 'rest') {
-      speak('Rest');
+      speak("You're done. Rest.");
       return;
     }
-    const text = `Round ${tabataRound} of ${tabataRounds}. Work!`;
+    const text = `Round ${tabataRound} of ${tabataRounds}. Start exercise!`;
     speak(phrasesEnabled ? `${text} ${randomHype()}` : text);
   }
 
