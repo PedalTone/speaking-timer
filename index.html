@@ -215,6 +215,26 @@
   .switch input:checked + .slider::before {
     transform: translateX(20px);
   }
+  .select-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .select-row select {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--ring-track);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
 </style>
 </head>
 <body>
@@ -272,6 +292,13 @@
       </span>
     </label>
 
+    <div class="select-row" id="voiceRow" style="display:none;">
+      <label for="voiceSelect">Voice</label>
+      <!-- autocomplete=off stops the browser restoring a stale selection over
+           the one this page sets after the voice list loads. -->
+      <select id="voiceSelect" autocomplete="off"></select>
+    </div>
+
     <div class="controls">
       <button id="startPauseBtn" class="btn-primary">Start</button>
       <button id="resetBtn" class="btn-secondary">Reset</button>
@@ -297,6 +324,8 @@
   const resetBtn = document.getElementById('resetBtn');
   const statusEl = document.getElementById('status');
   const phrasesToggle = document.getElementById('phrasesToggle');
+  const voiceRow = document.getElementById('voiceRow');
+  const voiceSelect = document.getElementById('voiceSelect');
 
   const RING_CIRCUMFERENCE = 2 * Math.PI * 106;
 
@@ -306,6 +335,88 @@
     phrasesEnabled = phrasesToggle.checked;
     localStorage.setItem('phrasesEnabled', String(phrasesEnabled));
   });
+
+  // Safari populates the voice list asynchronously, so the picker is built on
+  // whatever is available now and rebuilt when the list arrives.
+  let availableVoices = [];
+  let selectedVoiceURI = localStorage.getItem('voiceURI') || '';
+
+  function selectedVoice() {
+    return availableVoices.find(v => v.voiceURI === selectedVoiceURI) || null;
+  }
+
+  // Apple ships joke/sound-effect voices alongside the real ones; they're
+  // useless for announcements and just bury the good voices in the list.
+  const NOVELTY_VOICES = new Set([
+    'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
+    'Deranged', 'Good News', 'Hysterical', 'Jester', 'Organ', 'Princess',
+    'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox'
+  ]);
+
+  function populateVoices() {
+    if (!('speechSynthesis' in window)) return;
+    const all = window.speechSynthesis.getVoices() || [];
+    const english = all.filter(v => /^en\b|^en-/i.test(v.lang));
+    const usable = (english.length ? english : all)
+      .filter(v => !NOVELTY_VOICES.has(v.name));
+    availableVoices = (usable.length ? usable : english.length ? english : all)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!availableVoices.length) {
+      voiceRow.style.display = 'none';
+      return;
+    }
+
+    voiceSelect.innerHTML = '';
+    availableVoices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = `${v.name} · ${v.lang}`;
+      voiceSelect.appendChild(opt);
+    });
+    applyVoiceSelection();
+    voiceRow.style.display = '';
+  }
+
+  // Shows the saved voice, or the system default when it isn't on this device.
+  // Never rewrites the saved preference: Safari hands back a partial voice list
+  // at first, and overwriting here would discard the real choice before the
+  // full list arrives.
+  function applyVoiceSelection() {
+    if (!availableVoices.length) return;
+    const hasPreferred = availableVoices.some(v => v.voiceURI === selectedVoiceURI);
+    voiceSelect.value = hasPreferred
+      ? selectedVoiceURI
+      : (availableVoices.find(v => v.default) || availableVoices[0]).voiceURI;
+  }
+
+  // Browsers restore a previous <select> state after load and can fire change
+  // for it, which would silently overwrite the saved voice and blurt a preview
+  // on page load. Only changes the user actually initiated are honoured.
+  let voiceInteracted = false;
+  ['pointerdown', 'keydown'].forEach(ev => {
+    voiceSelect.addEventListener(ev, () => { voiceInteracted = true; });
+  });
+
+  voiceSelect.addEventListener('change', () => {
+    if (!voiceInteracted) {
+      applyVoiceSelection();
+      return;
+    }
+    selectedVoiceURI = voiceSelect.value;
+    localStorage.setItem('voiceURI', selectedVoiceURI);
+    // Fired from a tap, so iOS allows this preview to play.
+    speak('Nice work. This is your timer voice.');
+  });
+
+  // Re-assert after the browser has done its own form restoration.
+  window.addEventListener('pageshow', applyVoiceSelection);
+
+  if ('speechSynthesis' in window) {
+    populateVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
+  }
 
   let mode = 'timer'; // 'timer' | 'tabata'
   let totalSeconds = 60;
@@ -373,6 +484,8 @@
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
     utterance.pitch = 1.1;
+    const voice = selectedVoice();
+    if (voice) utterance.voice = voice;
     window.speechSynthesis.speak(utterance);
   }
 
