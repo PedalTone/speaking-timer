@@ -478,16 +478,102 @@
     }
   }
 
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
+  function speak(text, onEnd) {
+    if (!('speechSynthesis' in window)) {
+      if (onEnd) onEnd();
+      return;
+    }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
     utterance.pitch = 1.1;
     const voice = selectedVoice();
     if (voice) utterance.voice = voice;
+    if (onEnd) {
+      let fired = false;
+      const once = () => { if (!fired) { fired = true; onEnd(); } };
+      utterance.onend = once;
+      utterance.onerror = once;
+      // Safety net: if the utterance never reports finishing (it happens on
+      // iOS), the recorded clip should still play rather than be swallowed.
+      setTimeout(once, Math.max(1200, text.length * 90));
+    }
     window.speechSynthesis.speak(utterance);
   }
+
+  // Recorded human clips, when any have been added. The pools are pulled from
+  // audio/manifest.json because a static site can't list a directory.
+  const audioClips = { hype: [], completion: [] };
+  const clipPlayer = new Audio();
+  clipPlayer.preload = 'auto';
+  let audioUnlocked = false;
+
+  function hasClips(pool) {
+    return audioClips[pool] && audioClips[pool].length > 0;
+  }
+
+  // iOS only allows an audio element to play if its first play() came from a
+  // tap, so the element is primed with silence on the Start button.
+  function unlockClipPlayer() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    clipPlayer.muted = true;
+    clipPlayer.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+    const done = () => { clipPlayer.muted = false; };
+    clipPlayer.play().then(() => { clipPlayer.pause(); done(); }).catch(done);
+  }
+
+  // A missing or unplayable clip must not swallow the announcement, so every
+  // failure path hands back to onFail, which speaks the phrase instead.
+  let clipFallback = null;
+
+  function runClipFallback() {
+    const f = clipFallback;
+    clipFallback = null;
+    if (f) f();
+  }
+
+  clipPlayer.addEventListener('error', runClipFallback);
+
+  function playClip(pool, onFail) {
+    if (!hasClips(pool)) {
+      if (onFail) onFail();
+      return;
+    }
+    const list = audioClips[pool];
+    clipFallback = onFail || null;
+    clipPlayer.src = 'audio/' + list[Math.floor(Math.random() * list.length)];
+    clipPlayer.play().then(() => { clipFallback = null; }).catch(runClipFallback);
+  }
+
+  // Speaks the informational part, then follows it with a recorded phrase when
+  // clips exist, otherwise falls back to a spoken phrase.
+  function announceWithPhrase(baseText, pool) {
+    if (!phrasesEnabled) {
+      if (baseText) speak(baseText);
+      return;
+    }
+    const spokenLine = () => speak(pool === 'completion' ? randomCompletion() : randomHype());
+    if (hasClips(pool)) {
+      if (baseText) speak(baseText, () => playClip(pool, spokenLine));
+      else playClip(pool, spokenLine);
+      return;
+    }
+    const line = pool === 'completion' ? randomCompletion() : randomHype();
+    speak(baseText ? `${baseText} ${line}` : line);
+  }
+
+  fetch('audio/manifest.json', { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(m => {
+      if (!m) return;
+      audioClips.hype = Array.isArray(m.hype) ? m.hype : [];
+      audioClips.completion = Array.isArray(m.completion) ? m.completion : [];
+      // Warm the HTTP cache so the first clip doesn't stall mid-workout.
+      [...audioClips.hype, ...audioClips.completion]
+        .forEach(src => fetch('audio/' + src).catch(() => {}));
+    })
+    .catch(() => {});
 
   const HYPE_LINES = [
     "You've got this.",
@@ -604,7 +690,7 @@
 
   function announceForRemaining(sec) {
     if (sec <= 0) {
-      speak(phrasesEnabled ? `Time's up. ${randomCompletion()}` : "Time's up");
+      announceWithPhrase("Time's up.", 'completion');
       return;
     }
     if (sec <= 10) {
@@ -612,7 +698,7 @@
       return;
     }
     if (sec % 15 === 0) {
-      speak(phrasesEnabled ? `${remainingPhrase(sec)}. ${randomHype()}` : remainingPhrase(sec));
+      announceWithPhrase(remainingPhrase(sec) + '.', 'hype');
     }
   }
 
@@ -624,7 +710,7 @@
     const halfway = Math.floor(totalSeconds / 2);
     // Skipped when halfway would land inside the countdown and talk over it.
     if (phrasesEnabled && halfway > 10 && sec === halfway) {
-      speak(`Halfway there. ${randomHype()}`);
+      announceWithPhrase('Halfway there.', 'hype');
       return;
     }
     if (sec <= 10) {
@@ -637,8 +723,7 @@
       speak("You're done. Rest.");
       return;
     }
-    const text = `Round ${tabataRound} of ${tabataRounds}. Start exercise!`;
-    speak(phrasesEnabled ? `${text} ${randomHype()}` : text);
+    announceWithPhrase(`Round ${tabataRound} of ${tabataRounds}. Start exercise!`, 'hype');
   }
 
   // iOS Safari only allows speechSynthesis to start from directly within a user
@@ -654,7 +739,7 @@
       speak(String(sec));
       return;
     }
-    speak(phrasesEnabled ? `${remainingPhrase(sec)}. ${randomHype()}` : remainingPhrase(sec));
+    announceWithPhrase(remainingPhrase(sec) + '.', 'hype');
   }
 
   // Also works around a WebKit bug where speechSynthesis silently stalls after
@@ -688,7 +773,7 @@
   function advanceTabataPhase() {
     if (tabataPhase === 'work') {
       if (tabataRound >= tabataRounds) {
-        speak(phrasesEnabled ? `Workout complete! ${randomCompletion()}` : 'Workout complete!');
+        announceWithPhrase('Workout complete!', 'completion');
         finishRun();
         return;
       }
@@ -745,6 +830,7 @@
     statusEl.textContent = mode === 'tabata'
       ? `Round ${tabataRound} of ${tabataRounds} — Running…`
       : 'Running…';
+    unlockClipPlayer();
     unlockAndAnnounceStart(remaining);
     startKeepAlive();
     intervalId = setInterval(tick, 1000);
