@@ -8,19 +8,36 @@ encouragement while you exercise.
 1. Use **Voice Memos** on your phone (or any recorder). One single recording is fine —
    no need for separate files.
 2. Find somewhere quiet. Hold the phone a hand's width from your mouth.
-3. Read the lines below **in order**, pausing about **2 seconds** between each one.
-   The pauses matter — they're how the recording gets split into clips.
+3. Pause about **2 seconds between each line**. The pauses matter — they're how the
+   recording gets split into separate clips. This is the one rule that really counts.
 4. Say them how you'd actually say them. Deadpan, shouty, sarcastic, encouraging —
    whatever suits you. The funny ones should sound like you're teasing a friend.
 5. Flub one? Just pause, say it again, and carry on. Extras get cleaned up.
 6. **You do not have to read all of them.** Do as many as you feel like and stop.
    Skipping around is fine too.
 
+## Make up your own — please do
+
+The list below is a starting point, not a script you have to stick to. Invent your
+own lines, riff on these, roast whoever's working out. Improvised ones work exactly
+the same way, and more variety makes the app better.
+
+Two things to keep in mind:
+
+- **Keep each line short** — under about 3 seconds. They play at fixed moments during
+  a workout, and a long one gets cut off when the next announcement arrives.
+- **Record in two batches**, because the two kinds get used at different moments:
+  first everything for *during* the workout, then say **"now the finishing ones"**
+  out loud, then the *end of workout* lines. That spoken marker is all that's needed
+  to sort them.
+
 Send the finished file back however's easiest.
 
 ---
 
-## Part 1 — Encouragement (said during the workout)
+## Part 1 — During the workout
+
+Ideas to get you going. Swap in your own freely.
 
 1. You've got this.
 2. Stay strong.
@@ -90,7 +107,9 @@ Send the finished file back however's easiest.
 
 ---
 
-## Part 2 — Finishing lines (said when the workout ends)
+## Part 2 — End of workout
+
+Say "now the finishing ones" before starting these.
 
 1. Job well done.
 2. You did it.
