@@ -293,7 +293,7 @@
     </label>
 
     <div class="select-row" id="voiceRow" style="display:none;">
-      <label for="voiceSelect">Voice</label>
+      <label for="voiceSelect">Computer voice</label>
       <!-- autocomplete=off stops the browser restoring a stale selection over
            the one this page sets after the voice list loads. -->
       <select id="voiceSelect" autocomplete="off"></select>
@@ -394,13 +394,20 @@
   // Browsers restore a previous <select> state after load and can fire change
   // for it, which would silently overwrite the saved voice and blurt a preview
   // on page load. Only changes the user actually initiated are honoured.
+  // Broad event list on purpose: iOS opens a native picker when a <select> is
+  // tapped and doesn't reliably raise pointerdown on the element, so listening
+  // for only that reverted every pick the user made on a phone.
   let voiceInteracted = false;
-  ['pointerdown', 'keydown'].forEach(ev => {
+  ['touchstart', 'mousedown', 'pointerdown', 'keydown', 'click', 'focus'].forEach(ev => {
     voiceSelect.addEventListener(ev, () => { voiceInteracted = true; });
   });
 
+  // Second line of defence, so a browser whose picker raises none of the above
+  // still works: restoration fires within moments of load, a person cannot.
+  const pageReadyAt = Date.now();
+
   voiceSelect.addEventListener('change', () => {
-    if (!voiceInteracted) {
+    if (!voiceInteracted && Date.now() - pageReadyAt < 1500) {
       applyVoiceSelection();
       return;
     }
