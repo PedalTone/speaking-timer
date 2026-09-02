@@ -31,10 +31,12 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 mkdir -p "$OUT_DIR"
 
-# Silence threshold and minimum gap. Widen -45dB toward -35dB if a noisy
-# recording refuses to split; raise 1.2 if pauses inside sentences split them.
-SILENCE_DB="${SILENCE_DB:--45dB}"
-MIN_PAUSE="${MIN_PAUSE:-1.2}"
+# -35dB suits real rooms: a phone recording carries enough room tone that a
+# stricter -45dB reads the gaps as speech and merges phrases together. Lower it
+# toward -45dB for a very quiet recording that splits mid-sentence, and raise
+# MIN_PAUSE if natural pauses inside a sentence are being treated as breaks.
+SILENCE_DB="${SILENCE_DB:--35dB}"
+MIN_PAUSE="${MIN_PAUSE:-0.9}"
 
 echo "Splitting $SRC on pauses (threshold $SILENCE_DB, min gap ${MIN_PAUSE}s)..."
 # Needs -loglevel info: silencedetect reports at info level, so anything
