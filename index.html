@@ -484,6 +484,9 @@
       return;
     }
     window.speechSynthesis.cancel();
+    // The keep-alive below toggles pause/resume; if a pause ever lands without
+    // its resume the queue stays stuck and everything after it is silent.
+    window.speechSynthesis.resume();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.05;
     utterance.pitch = 1.1;
@@ -504,9 +507,13 @@
   // Recorded human clips, when any have been added. The pools are pulled from
   // audio/manifest.json because a static site can't list a directory.
   const audioClips = { hype: [], completion: [] };
-  const clipPlayer = new Audio();
-  clipPlayer.preload = 'auto';
-  let audioUnlocked = false;
+
+  // Clips play through Web Audio rather than an <audio> element. On iOS an
+  // audio element claims the audio session and speechSynthesis stays silent
+  // for the rest of the session afterwards, which killed every announcement
+  // following the first clip. Web Audio coexists with speech.
+  let audioCtx = null;
+  const clipBuffers = new Map();
 
   // Falls back to the encouragement clips for finishing lines when nobody has
   // recorded dedicated ones — a real voice signing off beats dropping back to
@@ -521,33 +528,51 @@
     return clipsFor(pool).length > 0;
   }
 
-  // iOS only allows an audio element to play if its first play() came from a
-  // tap, so the element is primed with silence on the Start button.
+  // iOS starts the context suspended and only lets a tap resume it, so this
+  // runs from the Start button.
   function unlockClipPlayer() {
-    if (audioUnlocked) return;
-    audioUnlocked = true;
-    clipPlayer.muted = true;
-    clipPlayer.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-    const done = () => { clipPlayer.muted = false; };
-    clipPlayer.play().then(() => { clipPlayer.pause(); done(); }).catch(done);
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      try { audioCtx = new Ctx(); } catch (e) { return; }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   }
 
-  // A missing or unplayable clip must not swallow the announcement, so every
+  function loadClip(src) {
+    if (clipBuffers.has(src)) return Promise.resolve(clipBuffers.get(src));
+    return fetch('audio/' + src)
+      .then(r => {
+        if (!r.ok) throw new Error('clip ' + src + ' returned ' + r.status);
+        return r.arrayBuffer();
+      })
+      // Callback form: older Safari doesn't return a promise from decodeAudioData.
+      .then(raw => new Promise((resolve, reject) => {
+        audioCtx.decodeAudioData(raw, resolve, reject);
+      }))
+      .then(buffer => {
+        clipBuffers.set(src, buffer);
+        return buffer;
+      });
+  }
+
+  // A missing or unplayable clip must not swallow the announcement: every
   // failure path hands back to onFail, which speaks the phrase instead.
-  // The play() promise alone decides success or failure. An 'error' listener
-  // here as well would double-fire: swapping src aborts the previous load and
-  // raises error against the new clip, so a clip would play AND be spoken.
   function playClip(pool, onFail) {
     const list = clipsFor(pool);
-    if (!list.length) {
+    if (!list.length || !audioCtx) {
       if (onFail) onFail();
       return;
     }
-    clipPlayer.src = 'audio/' + list[Math.floor(Math.random() * list.length)];
-    const started = clipPlayer.play();
-    if (started && started.catch) {
-      started.catch(() => { if (onFail) onFail(); });
-    }
+    const src = list[Math.floor(Math.random() * list.length)];
+    loadClip(src)
+      .then(buffer => {
+        const node = audioCtx.createBufferSource();
+        node.buffer = buffer;
+        node.connect(audioCtx.destination);
+        node.start();
+      })
+      .catch(() => { if (onFail) onFail(); });
   }
 
   // Speaks the informational part, then follows it with a recorded phrase when
