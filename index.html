@@ -508,8 +508,17 @@
   clipPlayer.preload = 'auto';
   let audioUnlocked = false;
 
+  // Falls back to the encouragement clips for finishing lines when nobody has
+  // recorded dedicated ones — a real voice signing off beats dropping back to
+  // the computer voice. Picks up genuine finishing clips as soon as they exist.
+  function clipsFor(pool) {
+    if (audioClips[pool] && audioClips[pool].length) return audioClips[pool];
+    if (pool === 'completion' && audioClips.hype.length) return audioClips.hype;
+    return [];
+  }
+
   function hasClips(pool) {
-    return audioClips[pool] && audioClips[pool].length > 0;
+    return clipsFor(pool).length > 0;
   }
 
   // iOS only allows an audio element to play if its first play() came from a
@@ -525,25 +534,20 @@
 
   // A missing or unplayable clip must not swallow the announcement, so every
   // failure path hands back to onFail, which speaks the phrase instead.
-  let clipFallback = null;
-
-  function runClipFallback() {
-    const f = clipFallback;
-    clipFallback = null;
-    if (f) f();
-  }
-
-  clipPlayer.addEventListener('error', runClipFallback);
-
+  // The play() promise alone decides success or failure. An 'error' listener
+  // here as well would double-fire: swapping src aborts the previous load and
+  // raises error against the new clip, so a clip would play AND be spoken.
   function playClip(pool, onFail) {
-    if (!hasClips(pool)) {
+    const list = clipsFor(pool);
+    if (!list.length) {
       if (onFail) onFail();
       return;
     }
-    const list = audioClips[pool];
-    clipFallback = onFail || null;
     clipPlayer.src = 'audio/' + list[Math.floor(Math.random() * list.length)];
-    clipPlayer.play().then(() => { clipFallback = null; }).catch(runClipFallback);
+    const started = clipPlayer.play();
+    if (started && started.catch) {
+      started.catch(() => { if (onFail) onFail(); });
+    }
   }
 
   // Speaks the informational part, then follows it with a recorded phrase when
