@@ -567,15 +567,44 @@
       });
   }
 
+  function shuffled(list) {
+    const out = list.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = out[i]; out[i] = out[j]; out[j] = t;
+    }
+    return out;
+  }
+
+  // Draws without replacement: every clip in the pool is heard once before any
+  // repeats. Each style/pool keeps its own deck, rebuilt when it runs out or
+  // when the pool itself changes (the manifest arrives after first paint).
+  const clipDecks = new Map();
+  let lastClipSrc = null;
+
+  function nextClip(pool) {
+    const list = clipsFor(pool);
+    if (!list.length) return null;
+    const key = phraseStyle + ':' + pool + ':' + list.length;
+    let deck = clipDecks.get(key);
+    if (!deck || !deck.length) {
+      deck = shuffled(list);
+      // Stop a fresh deck opening with the clip that just played.
+      if (deck.length > 1 && deck[0] === lastClipSrc) deck.push(deck.shift());
+      clipDecks.set(key, deck);
+    }
+    lastClipSrc = deck.shift();
+    return lastClipSrc;
+  }
+
   // A missing or unplayable clip must not swallow the announcement: every
   // failure path hands back to onFail, which speaks the phrase instead.
   function playClip(pool, onFail) {
-    const list = clipsFor(pool);
-    if (!list.length || !audioCtx) {
+    const src = audioCtx ? nextClip(pool) : null;
+    if (!src) {
       if (onFail) onFail();
       return;
     }
-    const src = list[Math.floor(Math.random() * list.length)];
     loadClip(src)
       .then(buffer => {
         const node = audioCtx.createBufferSource();
@@ -706,16 +735,18 @@
     "Go have a snack, you earned it."
   ];
 
-  // Picks at random, never the same line twice in a row.
+  // Same draw-without-replacement deal as the clips: the whole list is heard
+  // once before anything repeats.
   function makePicker(lines) {
-    let last = -1;
+    let deck = [];
+    let last = null;
     return function () {
-      let i = Math.floor(Math.random() * lines.length);
-      if (lines.length > 1 && i === last) {
-        i = (i + 1) % lines.length;
+      if (!deck.length) {
+        deck = shuffled(lines);
+        if (deck.length > 1 && deck[0] === last) deck.push(deck.shift());
       }
-      last = i;
-      return lines[i];
+      last = deck.shift();
+      return last;
     };
   }
 
