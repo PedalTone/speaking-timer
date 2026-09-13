@@ -2,22 +2,29 @@
 #
 # Splits a long voice recording into individual phrase clips for the app.
 #
-#   ./tools/process-recordings.sh raw/alex.m4a alex hype
+#   ./tools/process-recordings.sh raw/alex.m4a alex cheeky hype
 #
 # Arguments:
 #   1. the raw recording (m4a, wav, mp3 — anything ffmpeg reads)
 #   2. a short name for the speaker, used in filenames
-#   3. which pool the clips belong to: "hype" or "completion"
+#   3. the style: "supportive" or "cheeky"
+#   4. which pool: "hype" (during workout) or "completion" (at the end)
 #
-# Splits on the ~2s pauses between phrases, trims silence, normalises loudness
-# so no one speaker is louder than the rest, and writes web-ready m4a files to
-# audio/<pool>/. Run tools/build-manifest.sh afterwards.
+# Splits on the pauses between phrases, trims silence, normalises loudness so
+# no one speaker is louder than the rest, and writes web-ready m4a files to
+# audio/<style>/<pool>/. Run tools/build-manifest.sh afterwards.
 
 set -euo pipefail
 
-SRC="${1:?usage: process-recordings.sh <recording> <speaker> <hype|completion>}"
+SRC="${1:?usage: process-recordings.sh <recording> <speaker> <supportive|cheeky> <hype|completion>}"
 SPEAKER="${2:?missing speaker name}"
-POOL="${3:?missing pool: hype or completion}"
+STYLE="${3:?missing style: supportive or cheeky}"
+POOL="${4:?missing pool: hype or completion}"
+
+case "$STYLE" in
+  supportive|cheeky) ;;
+  *) echo "style must be 'supportive' or 'cheeky', got '$STYLE'" >&2; exit 1 ;;
+esac
 
 case "$POOL" in
   hype|completion) ;;
@@ -25,7 +32,7 @@ case "$POOL" in
 esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="$REPO_ROOT/audio/$POOL"
+OUT_DIR="$REPO_ROOT/audio/$STYLE/$POOL"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -93,5 +100,5 @@ while read -r START END; do
     "$OUT_DIR/$NAME.m4a"
 done < "$WORK_DIR/spans.txt"
 
-echo "Wrote $COUNT clips to audio/$POOL/ as ${SPEAKER}-NN.m4a"
+echo "Wrote $COUNT clips to audio/$STYLE/$POOL/ as ${SPEAKER}-NN.m4a"
 echo "Listen through them, delete any duds, then run tools/build-manifest.sh"

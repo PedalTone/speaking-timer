@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Regenerates audio/manifest.json from whatever clips are in audio/hype/ and
-# audio/completion/. A static site can't list a directory, so the app reads
+# Regenerates audio/manifest.json from whatever clips are in
+# audio/<style>/<pool>/. A static site can't list a directory, so the app reads
 # this file to learn which clips exist. Run after adding or deleting clips.
 
 set -euo pipefail
@@ -12,15 +12,20 @@ cd "$REPO_ROOT"
 python3 - <<'PY'
 import json, os
 
+STYLES = ("supportive", "cheeky")
+POOLS = ("hype", "completion")
+
 manifest = {}
-for pool in ("hype", "completion"):
-    d = os.path.join("audio", pool)
-    files = sorted(
-        f"{pool}/{n}" for n in os.listdir(d)
-        if n.lower().endswith((".m4a", ".mp3", ".wav")) and not n.startswith(".")
-    ) if os.path.isdir(d) else []
-    manifest[pool] = files
-    print(f"{pool}: {len(files)} clips")
+for style in STYLES:
+    manifest[style] = {}
+    for pool in POOLS:
+        d = os.path.join("audio", style, pool)
+        files = sorted(
+            f"{style}/{pool}/{n}" for n in os.listdir(d)
+            if n.lower().endswith((".m4a", ".mp3", ".wav")) and not n.startswith(".")
+        ) if os.path.isdir(d) else []
+        manifest[style][pool] = files
+        print(f"{style}/{pool}: {len(files)} clips")
 
 os.makedirs("audio", exist_ok=True)
 with open("audio/manifest.json", "w") as f:

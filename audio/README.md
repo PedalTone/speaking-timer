@@ -4,9 +4,15 @@ Recorded human voices for the encouragement phrases. The app falls back to the
 computer voice whenever a pool is empty or a clip won't load, so this directory
 can be empty and everything still works.
 
-- `hype/` — encouragement, played during a workout
-- `completion/` — sign-offs, played when a timer or workout finishes
+Laid out as `<style>/<pool>/`:
+
+- `supportive/hype/`, `supportive/completion/` — the warmer set
+- `cheeky/hype/`, `cheeky/completion/` — the teasing set
 - `manifest.json` — generated; a static site can't list a directory
+
+`hype` plays during a workout, `completion` when a timer or workout finishes.
+The on-screen Random / Supportive / Cheeky switch picks which style is drawn
+from, and it governs the sign-off as well as the encouragement.
 
 Clips are picked at random from the whole pool, so every speaker gets mixed
 together and nobody has to record every phrase. Adding a new person needs no
@@ -16,8 +22,10 @@ code change — process their file, rebuild the manifest, commit.
 
 Send them `RECORDING-SCRIPT.md`, then:
 
-    ./tools/process-recordings.sh raw/theirname.m4a theirname hype
+    ./tools/process-recordings.sh raw/theirname.m4a theirname cheeky hype
     ./tools/build-manifest.sh
+
+The style and pool are the third and fourth arguments.
 
 Keep raw recordings in `raw/`, which is gitignored — only the split clips
 belong in the repo.
@@ -30,8 +38,11 @@ loudness to a common target so one speaker isn't louder than the rest.
 People are asked to record encouragement first, say a marker out loud, then the
 finishing lines. Everything lands in `hype/` initially; move the finishing ones:
 
-    git mv audio/hype/name-41.m4a audio/completion/   # and the rest of the tail
+    git mv audio/cheeky/hype/name-41.m4a audio/cheeky/completion/   # and the tail
     ./tools/build-manifest.sh
+
+Simplest of all is what Dan did: record the two batches as two separate files,
+so each goes straight to the right pool and there are no markers to find.
 
 **Delete the marker clips.** They get split out as if they were phrases. Mom's
 recording had two — one opening the during-workout batch, one before the

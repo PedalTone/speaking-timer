@@ -215,25 +215,36 @@
   .switch input:checked + .slider::before {
     transform: translateX(20px);
   }
-  .select-row {
+  .style-switch {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    gap: 6px;
     margin-bottom: 20px;
-    font-size: 14px;
-    color: var(--text);
   }
-  .select-row select {
+  .style-btn {
     flex: 1;
-    min-width: 0;
-    padding: 8px 10px;
-    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 9px 4px;
     border: 1px solid var(--ring-track);
+    border-radius: 12px;
     background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-    font-family: inherit;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.15;
+    cursor: pointer;
+  }
+  .style-btn span {
+    font-size: 10px;
+    font-weight: 400;
+    opacity: 0.75;
+  }
+  .style-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
   }
 </style>
 </head>
@@ -292,11 +303,10 @@
       </span>
     </label>
 
-    <div class="select-row" id="voiceRow" style="display:none;">
-      <label for="voiceSelect">Computer voice</label>
-      <!-- autocomplete=off stops the browser restoring a stale selection over
-           the one this page sets after the voice list loads. -->
-      <select id="voiceSelect" autocomplete="off"></select>
+    <div class="style-switch" id="styleSwitch">
+      <button type="button" class="style-btn active" data-style="random">Random</button>
+      <button type="button" class="style-btn" data-style="supportive">Supportive<span>(mostly!)</span></button>
+      <button type="button" class="style-btn" data-style="cheeky">Cheeky</button>
     </div>
 
     <div class="controls">
@@ -324,8 +334,7 @@
   const resetBtn = document.getElementById('resetBtn');
   const statusEl = document.getElementById('status');
   const phrasesToggle = document.getElementById('phrasesToggle');
-  const voiceRow = document.getElementById('voiceRow');
-  const voiceSelect = document.getElementById('voiceSelect');
+  const styleSwitch = document.getElementById('styleSwitch');
 
   const RING_CIRCUMFERENCE = 2 * Math.PI * 106;
 
@@ -336,93 +345,48 @@
     localStorage.setItem('phrasesEnabled', String(phrasesEnabled));
   });
 
-  // Safari populates the voice list asynchronously, so the picker is built on
-  // whatever is available now and rebuilt when the list arrives.
-  let availableVoices = [];
-  let selectedVoiceURI = localStorage.getItem('voiceURI') || '';
+  // Which recorded set the phrases come from: 'random' draws from both.
+  let phraseStyle = localStorage.getItem('phraseStyle') || 'random';
 
-  function selectedVoice() {
-    return availableVoices.find(v => v.voiceURI === selectedVoiceURI) || null;
+  function applyStyleButtons() {
+    styleSwitch.querySelectorAll('.style-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.style === phraseStyle);
+    });
   }
 
-  // Apple ships joke/sound-effect voices alongside the real ones; they're
-  // useless for announcements and just bury the good voices in the list.
-  const NOVELTY_VOICES = new Set([
-    'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos',
-    'Deranged', 'Good News', 'Hysterical', 'Jester', 'Organ', 'Princess',
-    'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox'
-  ]);
+  styleSwitch.querySelectorAll('.style-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      phraseStyle = btn.dataset.style;
+      localStorage.setItem('phraseStyle', phraseStyle);
+      applyStyleButtons();
+      // Fired from a tap, so iOS allows this preview to play.
+      unlockClipPlayer();
+      playClip('hype');
+    });
+  });
+  applyStyleButtons();
 
-  function populateVoices() {
+  // One fixed voice for the spoken parts. Safari fills the voice list
+  // asynchronously, so this re-resolves whenever the list changes and falls
+  // back to the system default on a device where Samantha isn't installed.
+  const PREFERRED_VOICE = 'Samantha';
+  let spokenVoice = null;
+
+  function resolveVoice() {
     if (!('speechSynthesis' in window)) return;
     const all = window.speechSynthesis.getVoices() || [];
-    const english = all.filter(v => /^en\b|^en-/i.test(v.lang));
-    const usable = (english.length ? english : all)
-      .filter(v => !NOVELTY_VOICES.has(v.name));
-    availableVoices = (usable.length ? usable : english.length ? english : all)
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    if (!availableVoices.length) {
-      voiceRow.style.display = 'none';
-      return;
-    }
-
-    voiceSelect.innerHTML = '';
-    availableVoices.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.voiceURI;
-      opt.textContent = `${v.name} · ${v.lang}`;
-      voiceSelect.appendChild(opt);
-    });
-    applyVoiceSelection();
-    voiceRow.style.display = '';
+    spokenVoice = all.find(v => v.name === PREFERRED_VOICE)
+      || all.find(v => v.name.indexOf(PREFERRED_VOICE) === 0)
+      || null;
   }
 
-  // Shows the saved voice, or the system default when it isn't on this device.
-  // Never rewrites the saved preference: Safari hands back a partial voice list
-  // at first, and overwriting here would discard the real choice before the
-  // full list arrives.
-  function applyVoiceSelection() {
-    if (!availableVoices.length) return;
-    const hasPreferred = availableVoices.some(v => v.voiceURI === selectedVoiceURI);
-    voiceSelect.value = hasPreferred
-      ? selectedVoiceURI
-      : (availableVoices.find(v => v.default) || availableVoices[0]).voiceURI;
+  function selectedVoice() {
+    return spokenVoice;
   }
-
-  // Browsers restore a previous <select> state after load and can fire change
-  // for it, which would silently overwrite the saved voice and blurt a preview
-  // on page load. Only changes the user actually initiated are honoured.
-  // Broad event list on purpose: iOS opens a native picker when a <select> is
-  // tapped and doesn't reliably raise pointerdown on the element, so listening
-  // for only that reverted every pick the user made on a phone.
-  let voiceInteracted = false;
-  ['touchstart', 'mousedown', 'pointerdown', 'keydown', 'click', 'focus'].forEach(ev => {
-    voiceSelect.addEventListener(ev, () => { voiceInteracted = true; });
-  });
-
-  // Second line of defence, so a browser whose picker raises none of the above
-  // still works: restoration fires within moments of load, a person cannot.
-  const pageReadyAt = Date.now();
-
-  voiceSelect.addEventListener('change', () => {
-    if (!voiceInteracted && Date.now() - pageReadyAt < 1500) {
-      applyVoiceSelection();
-      return;
-    }
-    selectedVoiceURI = voiceSelect.value;
-    localStorage.setItem('voiceURI', selectedVoiceURI);
-    // Fired from a tap, so iOS allows this preview to play.
-    speak('Nice work. This is your timer voice.');
-  });
-
-  // Re-assert after the browser has done its own form restoration.
-  window.addEventListener('pageshow', applyVoiceSelection);
 
   if ('speechSynthesis' in window) {
-    populateVoices();
-    window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
+    resolveVoice();
+    window.speechSynthesis.addEventListener('voiceschanged', resolveVoice);
   }
 
   let mode = 'timer'; // 'timer' | 'tabata'
@@ -513,7 +477,10 @@
 
   // Recorded human clips, when any have been added. The pools are pulled from
   // audio/manifest.json because a static site can't list a directory.
-  const audioClips = { hype: [], completion: [] };
+  const audioClips = {
+    supportive: { hype: [], completion: [] },
+    cheeky: { hype: [], completion: [] }
+  };
 
   // Clips play through Web Audio rather than an <audio> element. On iOS an
   // audio element claims the audio session and speechSynthesis stays silent
@@ -522,13 +489,30 @@
   let audioCtx = null;
   const clipBuffers = new Map();
 
-  // Falls back to the encouragement clips for finishing lines when nobody has
-  // recorded dedicated ones — a real voice signing off beats dropping back to
-  // the computer voice. Picks up genuine finishing clips as soon as they exist.
+  // Which styles are in play: the chosen one, or both when set to random.
+  function activeStyles() {
+    return phraseStyle === 'random' ? ['supportive', 'cheeky'] : [phraseStyle];
+  }
+
+  // Combines the chosen styles for the pool. Falls back to encouragement clips
+  // for finishing lines when a style has none recorded — a real voice signing
+  // off beats dropping back to the computer voice — and falls back to the other
+  // style entirely if the chosen one is empty, so picking Cheeky before any
+  // cheeky clips exist still gets you a human voice.
   function clipsFor(pool) {
-    if (audioClips[pool] && audioClips[pool].length) return audioClips[pool];
-    if (pool === 'completion' && audioClips.hype.length) return audioClips.hype;
-    return [];
+    let list = [];
+    activeStyles().forEach(style => {
+      const set = audioClips[style];
+      if (!set) return;
+      if (set[pool] && set[pool].length) list = list.concat(set[pool]);
+      else if (pool === 'completion' && set.hype.length) list = list.concat(set.hype);
+    });
+    if (list.length) return list;
+    Object.keys(audioClips).forEach(style => {
+      const set = audioClips[style];
+      list = list.concat(set[pool] || [], pool === 'completion' ? set.hype : []);
+    });
+    return list;
   }
 
   function hasClips(pool) {
@@ -603,11 +587,16 @@
     .then(r => (r.ok ? r.json() : null))
     .then(m => {
       if (!m) return;
-      audioClips.hype = Array.isArray(m.hype) ? m.hype : [];
-      audioClips.completion = Array.isArray(m.completion) ? m.completion : [];
+      let all = [];
+      Object.keys(audioClips).forEach(style => {
+        const set = m[style] || {};
+        ['hype', 'completion'].forEach(pool => {
+          audioClips[style][pool] = Array.isArray(set[pool]) ? set[pool] : [];
+          all = all.concat(audioClips[style][pool]);
+        });
+      });
       // Warm the HTTP cache so the first clip doesn't stall mid-workout.
-      [...audioClips.hype, ...audioClips.completion]
-        .forEach(src => fetch('audio/' + src).catch(() => {}));
+      all.forEach(src => fetch('audio/' + src).catch(() => {}));
     })
     .catch(() => {});
 
