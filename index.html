@@ -215,37 +215,50 @@
   .switch input:checked + .slider::before {
     transform: translateX(20px);
   }
-  .style-switch {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 20px;
-  }
-  .style-btn {
-    flex: 1;
+  /* Sits under the phrases toggle as a compact vertical list, indented to
+     read as belonging to it. Hidden entirely when phrases are switched off. */
+  /* display:flex below would otherwise beat the [hidden] attribute. */
+  .style-list[hidden] { display: none; }
+  .style-list {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    margin: -8px 0 18px 4px;
+  }
+  .style-opt {
+    flex: none;
+    display: flex;
     align-items: center;
-    gap: 1px;
-    padding: 9px 4px;
-    border: 1px solid var(--ring-track);
-    border-radius: 12px;
-    background: var(--bg);
+    gap: 7px;
+    width: auto;
+    padding: 3px 2px;
+    border: none;
+    background: none;
     color: var(--muted);
     font-size: 13px;
-    font-weight: 600;
-    line-height: 1.15;
+    font-weight: 400;
     cursor: pointer;
   }
-  .style-btn span {
-    font-size: 10px;
-    font-weight: 400;
-    opacity: 0.75;
+  .style-opt i {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 1.5px solid var(--ring-track);
+    flex-shrink: 0;
+    box-sizing: border-box;
   }
-  .style-btn.active {
-    background: var(--accent);
+  .style-opt em {
+    font-style: normal;
+    font-size: 11px;
+    opacity: 0.7;
+  }
+  .style-opt.active { color: var(--text); font-weight: 600; }
+  .style-opt.active i {
     border-color: var(--accent);
-    color: #fff;
+    border-width: 4px;
   }
+  .style-opt:active { transform: none; }
 </style>
 </head>
 <body>
@@ -303,10 +316,10 @@
       </span>
     </label>
 
-    <div class="style-switch" id="styleSwitch">
-      <button type="button" class="style-btn active" data-style="random">Random</button>
-      <button type="button" class="style-btn" data-style="supportive">Supportive<span>(mostly!)</span></button>
-      <button type="button" class="style-btn" data-style="cheeky">Cheeky</button>
+    <div class="style-list" id="styleSwitch">
+      <button type="button" class="style-opt active" data-style="random"><i></i>Random</button>
+      <button type="button" class="style-opt" data-style="supportive"><i></i>Supportive <em>(mostly!)</em></button>
+      <button type="button" class="style-opt" data-style="cheeky"><i></i>Cheeky</button>
     </div>
 
     <div class="controls">
@@ -343,18 +356,24 @@
   phrasesToggle.addEventListener('change', () => {
     phrasesEnabled = phrasesToggle.checked;
     localStorage.setItem('phrasesEnabled', String(phrasesEnabled));
+    updateStyleVisibility();
   });
+
+  // The style choice only means anything while phrases are on.
+  function updateStyleVisibility() {
+    styleSwitch.hidden = !phrasesEnabled;
+  }
 
   // Which recorded set the phrases come from: 'random' draws from both.
   let phraseStyle = localStorage.getItem('phraseStyle') || 'random';
 
   function applyStyleButtons() {
-    styleSwitch.querySelectorAll('.style-btn').forEach(btn => {
+    styleSwitch.querySelectorAll('.style-opt').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.style === phraseStyle);
     });
   }
 
-  styleSwitch.querySelectorAll('.style-btn').forEach(btn => {
+  styleSwitch.querySelectorAll('.style-opt').forEach(btn => {
     btn.addEventListener('click', () => {
       phraseStyle = btn.dataset.style;
       localStorage.setItem('phraseStyle', phraseStyle);
@@ -365,6 +384,7 @@
     });
   });
   applyStyleButtons();
+  updateStyleVisibility();
 
   // One fixed voice for the spoken parts. Safari fills the voice list
   // asynchronously, so this re-resolves whenever the list changes and falls
