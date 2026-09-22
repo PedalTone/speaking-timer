@@ -163,6 +163,14 @@
   .btn-primary { background: var(--accent); color: white; }
   .btn-danger { background: var(--accent-active); color: white; }
   .btn-secondary { background: var(--ring-track); color: var(--text); }
+  .version {
+    margin-top: 10px;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+    color: var(--muted);
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+  }
   .status {
     margin-top: 16px;
     font-size: 13px;
@@ -327,6 +335,8 @@
       <button id="resetBtn" class="btn-secondary">Reset</button>
     </div>
     <div class="status" id="status"></div>
+    <!-- Rewritten by tools/stamp-version.sh on every commit. -->
+    <div class="version" id="version">v2026.09.22.1845</div>
   </div>
 
 <script>
