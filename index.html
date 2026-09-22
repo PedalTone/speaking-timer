@@ -42,8 +42,9 @@
     margin: 0;
     min-height: 100vh;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    /* Centred via margin:auto on the card rather than align-items:center.
+       With align-items, a card taller than the screen overflows equally both
+       ways and the top is clipped off where no scrolling can reach it. */
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
@@ -51,6 +52,7 @@
              max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
   }
   .card {
+    margin: auto;
     background: var(--card);
     border-radius: 24px;
     padding: 32px 28px 28px;
@@ -168,7 +170,7 @@
     font-size: 10px;
     letter-spacing: 0.3px;
     color: var(--muted);
-    opacity: 0.55;
+    opacity: 0.85;
     font-variant-numeric: tabular-nums;
   }
   .status {
@@ -336,7 +338,7 @@
     </div>
     <div class="status" id="status"></div>
     <!-- Rewritten by tools/stamp-version.sh on every commit. -->
-    <div class="version" id="version">v2026.09.22.1845</div>
+    <div class="version" id="version">v2026.09.22.1851</div>
   </div>
 
 <script>
